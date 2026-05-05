@@ -1,0 +1,53 @@
+services:
+  mysql:
+    image: mysql:5.7
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-teraapi}
+      MYSQL_DATABASE: ${DB_DATABASE:-teraapi}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # NOTE: ./share/db/*.sql are *data seeds* that depend on tables created at
+      # runtime by the tera-api Sequelize models. They cannot be mounted into
+      # /docker-entrypoint-initdb.d because that runs before the API initializes
+      # the schema. After first boot, seed manually:
+      #   docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/01_db_data.sql
+      #   docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/03_db_shop_data.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_PASSWORD:-teraapi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  tera-api:
+    build: .
+    image: tera-api:local
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+    ports:
+      - "80:80"      # Portal API
+      - "8040:8040"  # Gateway API
+      - "8050:8050"  # Admin Panel
+      - "8080:8080"  # Arbiter API (keep internal in production)
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./public:/app/public
+      - ./logs:/app/logs
+      - ./sessions:/app/sessions
+
+volumes:
+  mysql_data:
