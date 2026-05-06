@@ -132,21 +132,33 @@ class Reader {
 
 	readAttributes() {
 		const nameIndex = this.readUInt16();
-		const type = this.readUInt16();
-		let value = null;
+		const typeInfo = this.readUInt16();
+		// TypeInfo is packed: low 2 bits = typeCode, upper 14 bits = extCode.
+		// (Mirrors novadrop's CreateAttribute decode for build-92 datacenters.)
+		const typeCode = typeInfo & 0b11;
+		const extCode = (typeInfo & 0xFFFC) >>> 2;
 
-		if (type === 1) {
-			value = this.readUInt32();
-		} else if (type === 2) {
-			value = this.readFloat();
-		} else if (type === 5) {
-			value = this.readUInt32();
-			if (value !== 0 && value !== 1) {
-				throw `Reader: Attribute not a bool, value: ${value}`;
+		let type;
+		let value;
+
+		if (typeCode === 1) {
+			if (extCode === 0) {
+				type = 1; // Int32
+				value = this.readUInt32();
+			} else if (extCode === 1) {
+				type = 5; // Boolean — build-92 no longer constrains the int slot to {0,1}.
+				value = this.readUInt32() !== 0;
+			} else {
+				throw `Reader: Invalid extCode ${extCode} for typeCode 1 (int/bool)`;
 			}
-			value = Boolean(value);
-		} else {
+		} else if (typeCode === 2) {
+			type = 2; // Float
+			value = this.readFloat();
+		} else if (typeCode === 3) {
+			type = 3; // String — value packs (segIdx, elemIdx); extCode is the value hash.
 			value = this.readAddress();
+		} else {
+			throw `Reader: Invalid typeCode ${typeCode} (typeInfo=${typeInfo})`;
 		}
 
 		if (this.padding) {
