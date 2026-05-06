@@ -333,6 +333,57 @@ module.exports.RegisterNewAccount = modules => [
 /**
  * @param {modules} modules
  */
+module.exports.SetPasswordByUserNo = modules => [
+	[
+		body("userNo").trim()
+			.isInt({ min: 1 }).withMessage("Must contain a valid number")
+			.custom(value => modules.accountModel.info.findOne({
+				where: { accountDBID: value }
+			}).then(account => {
+				if (account === null) {
+					return Promise.reject("Not existing account ID");
+				}
+				return true;
+			})),
+		body("password").trim()
+			.isLength({ min: 8, max: 128 }).withMessage("Must contain a string between 8 and 128 characters long")
+	],
+	validationHandler(modules.logger),
+	/**
+	 * @type {RequestHandler}
+	 */
+	async (req, res, next) => {
+		const { userNo, password } = req.body;
+		const passWord = helpers.getPasswordString(password);
+
+		await modules.accountModel.info.update(
+			{ passWord },
+			{ where: { accountDBID: userNo } }
+		);
+
+		res.locals.__account = await modules.accountModel.info.findOne({
+			where: { accountDBID: userNo }
+		});
+
+		next();
+	},
+	writeOperationReport(modules.reportModel),
+	/**
+	 * @type {RequestHandler}
+	 */
+	(req, res, next) => {
+		res.json({
+			Return: true,
+			ReturnCode: 0,
+			Msg: "success",
+			UserNo: res.locals.__account.get("accountDBID")
+		});
+	}
+];
+
+/**
+ * @param {modules} modules
+ */
 module.exports.AddBenefitByUserNo = modules => [
 	[
 		body("userNo").trim()
