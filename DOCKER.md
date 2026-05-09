@@ -85,12 +85,13 @@ You should see `Core: $ Server ready $` followed by the version banner.
 
 ## 7. Seed the SQL data
 
-The two SQL files in `share/db/` are *data seeds*, not schema, so they must run **after** the API has created the tables (i.e. after step 6). Run them once:
+The SQL files in `share/db/` are *data seeds*, not schema — they must run **after** the API has created the tables (i.e. after step 6). Run them with the dedicated seed service:
 
 ```bash
-docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/01_db_data.sql
-docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/03_db_shop_data.sql
+docker compose run --rm db-seed
 ```
+
+The service applies every `*.sql` file in `share/db/` in lexicographic order, then exits. The SQL files are idempotent, so re-running is safe.
 
 Verify:
 

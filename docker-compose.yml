@@ -10,12 +10,6 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      # NOTE: ./share/db/*.sql are *data seeds* that depend on tables created at
-      # runtime by the tera-api Sequelize models. They cannot be mounted into
-      # /docker-entrypoint-initdb.d because that runs before the API initializes
-      # the schema. After first boot, seed manually:
-      #   docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/01_db_data.sql
-      #   docker compose exec -T mysql sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teraapi' < share/db/03_db_shop_data.sql
     ports:
       - "3306:3306"
     healthcheck:
@@ -48,6 +42,24 @@ services:
       - ./public:/app/public
       - ./logs:/app/logs
       - ./sessions:/app/sessions
+
+  db-seed:
+    build: .
+    image: tera-api:local
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      SEED_ONLY: "1"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - seed
+    volumes:
+      - ./.env:/app/.env:ro
 
 volumes:
   mysql_data:

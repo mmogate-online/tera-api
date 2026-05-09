@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+# When SEED_ONLY is set the container applies share/db/*.sql and exits.
+# Use the db-seed compose service rather than setting this flag manually.
+if [ -n "$SEED_ONLY" ]; then
+    exec node /app/src/seed.js
+fi
+
 # Extract bundled asset archives into bind-mounted data dirs on first boot.
 # Targets are considered "empty" when they contain only the upstream placeholder
 # `!Unpack ... .txt` marker files (or nothing at all).
