@@ -50,7 +50,7 @@ class ExpressServer {
 		});
 
 		this.app.use((req, res, next) => {
-			res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+			res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, no-transform");
 			res.set("Expires", 0);
 
 			next();
@@ -105,10 +105,10 @@ class ExpressServer {
 				const maxAge = 300;
 				const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
 
-				res.set("Cache-Control", `public, max-age=${maxAge}`);
+				res.set("Cache-Control", `public, max-age=${maxAge}, no-transform`);
 				res.set("Expires", expires);
 			} else {
-				res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+				res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, no-transform");
 				res.set("Expires", 0);
 			}
 
