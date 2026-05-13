@@ -14,6 +14,7 @@ data/geoip/*.mmdb
 data/shop-slides-bg/*
 data/tera-icons/*
 public/patch
+public/launcher
 public/updates
 share/dataitems
 config/*.js
