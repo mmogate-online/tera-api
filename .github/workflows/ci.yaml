@@ -10,13 +10,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # The runtime image ships on Node 18, but tests run on Node 20 LTS where the built-in node:test
       # runner is stable. Decoupling the test runtime from the production runtime is intentional.
       # package-lock.json is gitignored in this repo (the Dockerfile uses `npm install`), so we can't use
       # `npm ci` or setup-node's lockfile-based cache here.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -32,7 +32,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: vars
         run: |
@@ -42,23 +42,23 @@ jobs:
           echo "TAG=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Image tag: ${TAG}"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/tera-api
           tags: |
             type=raw,value=${{ steps.vars.outputs.TAG }}
             type=raw,value=latest
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
