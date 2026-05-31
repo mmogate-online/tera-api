@@ -14,12 +14,13 @@ jobs:
 
       # The runtime image ships on Node 18, but tests run on Node 20 LTS where the built-in node:test
       # runner is stable. Decoupling the test runtime from the production runtime is intentional.
+      # package-lock.json is gitignored in this repo (the Dockerfile uses `npm install`), so we can't use
+      # `npm ci` or setup-node's lockfile-based cache here.
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
 
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - run: npm test
 
   publish:
