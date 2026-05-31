@@ -1,9 +1,24 @@
 name: CI
 
 on:
+  # Skip CI when a push/PR touches ONLY files that affect neither the tests nor the image build
+  # (docs, the env template, license, editor/dev files). A commit that also changes any other file
+  # still runs. workflow_dispatch ignores path filters, so a manual run is always available.
   push:
     branches: [master]
+    paths-ignore:
+      - '**.md'
+      - '.env.example'
+      - 'LICENSE'
+      - '*.code-workspace'
+      - '*.bat'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - '.env.example'
+      - 'LICENSE'
+      - '*.code-workspace'
+      - '*.bat'
   workflow_dispatch:
 
 jobs:
