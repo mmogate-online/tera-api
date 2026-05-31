@@ -8,7 +8,10 @@
     "start_admin_panel": "node --expose-gc --max_old_space_size=8192 src/app --component admin_panel",
     "start_arbiter_api": "node --expose-gc --max_old_space_size=8192 src/app --component arbiter_api",
     "start_gateway_api": "node --expose-gc --max_old_space_size=8192 src/app --component gateway_api",
-    "start_portal_api": "node --expose-gc --max_old_space_size=8192 src/app --component portal_api"
+    "start_portal_api": "node --expose-gc --max_old_space_size=8192 src/app --component portal_api",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "author": "Non-commercial Project 'HSDN' <info@hsdn.org>",
   "keywords": [

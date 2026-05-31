@@ -1,12 +1,31 @@
-name: Docker Image
+name: CI
 
 on:
   push:
     branches: [master]
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runtime image ships on Node 18, but tests run on Node 20 LTS where the built-in node:test
+      # runner is stable. Decoupling the test runtime from the production runtime is intentional.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+  publish:
+    # Gate: never build/push an image unless the test suite passed. Skipped on pull requests (test-only).
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -24,6 +24,8 @@ config/*.js
 README.md
 LICENSE
 .eslintrc.json
+test
+.github
 Dockerfile
 docker-compose.yml
 .dockerignore

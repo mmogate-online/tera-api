@@ -11,6 +11,7 @@ const Op = require("sequelize").Op;
 const validator = require("validator");
 
 const Benefit = require("../actions/handlers/benefit");
+const env = require("../utils/env");
 const helpers = require("../utils/helpers");
 const { validationHandler, writeOperationReport } = require("../middlewares/gateway.middlewares");
 
@@ -50,6 +51,59 @@ module.exports.ListAccounts = ({ accountModel }) => [
 			ReturnCode: 0,
 			Msg: "success",
 			Accounts: data
+		});
+	}
+];
+
+/**
+ * Returns whether any non-banned account has a recent successful launcher login from the given IP.
+ * Consumed by a downstream connection-gate proxy's launcher-login pull fallback. Secured by a shared
+ * secret when API_GATEWAY_PROXY_SECRET is configured (the gateway is otherwise loopback-isolated).
+ * @param {modules} modules
+ */
+module.exports.HasRecentLoginByIp = ({ logger, sequelize, accountModel }) => [
+	[
+		query("ip").trim().isIP(),
+		query("maxAgeSeconds").trim().isInt({ min: 1 })
+	],
+	validationHandler(logger),
+	/**
+	 * @type {RequestHandler}
+	 */
+	async (req, res) => {
+		const secret = env.string("API_GATEWAY_PROXY_SECRET", "");
+
+		if (secret && req.get("x-api-key") !== secret) {
+			return res.status(401).json({ Return: false, ReturnCode: 401, Msg: "unauthorized" });
+		}
+
+		const { ip, maxAgeSeconds } = req.query;
+
+		// Recent-enough login for this IP, excluding accounts with an active ban. The ban filter mirrors
+		// the arbiter auth check: a required:false LEFT JOIN to active, in-window bans (so the account row
+		// is still returned), then "authorized" only when no such ban row joined.
+		const account = await accountModel.info.findOne({
+			where: {
+				lastLoginIP: ip,
+				lastLoginTime: { [Op.gt]: sequelize.literal(`NOW() - INTERVAL ${Number(maxAgeSeconds)} SECOND`) }
+			},
+			include: [{
+				as: "banned",
+				model: accountModel.bans,
+				where: {
+					active: 1,
+					startTime: { [Op.lt]: sequelize.fn("NOW") },
+					endTime: { [Op.gt]: sequelize.fn("NOW") }
+				},
+				required: false
+			}]
+		});
+
+		return res.json({
+			Return: true,
+			ReturnCode: 0,
+			Msg: "success",
+			Authorized: account !== null && account.get("banned") === null
 		});
 	}
 ];
