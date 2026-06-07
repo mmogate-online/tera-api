@@ -6,6 +6,7 @@
  */
 
 const moment = require("moment-timezone");
+const uuid = require("uuid").v4;
 const { query, body } = require("express-validator");
 const Op = require("sequelize").Op;
 const validator = require("validator");
@@ -13,6 +14,7 @@ const validator = require("validator");
 const Benefit = require("../actions/handlers/benefit");
 const env = require("../utils/env");
 const helpers = require("../utils/helpers");
+const proxyWebhook = require("../utils/proxyWebhook");
 const { validationHandler, writeOperationReport } = require("../middlewares/gateway.middlewares");
 
 /**
@@ -159,6 +161,61 @@ module.exports.ListCharactersByUserNo = ({ logger, accountModel }) => [
 			ReturnCode: 0,
 			Msg: "success",
 			Characters: data
+		});
+	}
+];
+
+/**
+ * Returns per-server character counts for an account, plus the account's last-played server. Consumed by
+ * the reforged-backend to drive the launcher's server list (counts + LastPlayedId) without a user session.
+ * A single grouped query (COUNT GROUP BY serverId) — never one query per server.
+ * @param {modules} modules
+ */
+module.exports.ListCharacterCountsByUserNo = ({ logger, sequelize, accountModel }) => [
+	[
+		query("userNo").trim().isNumeric()
+			.custom(value => accountModel.info.findOne({
+				where: { accountDBID: value }
+			}).then(data => {
+				if (value && data === null) {
+					return Promise.reject("Not existing account ID");
+				}
+				return true;
+			}))
+	],
+	validationHandler(logger),
+	/**
+	 * @type {RequestHandler}
+	 */
+	async (req, res, next) => {
+		const { userNo } = req.query;
+
+		const account = await accountModel.info.findOne({
+			where: { accountDBID: userNo }
+		});
+
+		const characters = await accountModel.characters.findAll({
+			attributes: ["serverId", [sequelize.fn("COUNT", "characterId"), "charCount"]],
+			group: ["serverId"],
+			where: { accountDBID: userNo }
+		});
+
+		const data = [];
+
+		characters.forEach(character => {
+			data.push({
+				ServerId: character.get("serverId"),
+				Count: Number(character.get("charCount"))
+			});
+		});
+
+		res.json({
+			Return: true,
+			ReturnCode: 0,
+			Msg: "success",
+			UserNo: account.get("accountDBID"),
+			LastLoginServer: account.get("lastLoginServer"),
+			CharacterCounts: data
 		});
 	}
 ];
@@ -431,6 +488,66 @@ module.exports.SetPasswordByUserNo = modules => [
 			ReturnCode: 0,
 			Msg: "success",
 			UserNo: res.locals.__account.get("accountDBID")
+		});
+	}
+];
+
+/**
+ * Mints a launcher game session for an account without a password (server-to-server). Mirrors the portal
+ * launcher's GetAuthKeyAction: generate a fresh AuthKey, persist it on the account row, and fire the
+ * connection-gate proxy grant for the player's real IP (passed by the reforged-backend). The arbiter then
+ * validates UserNo + AuthKey at game-server connect.
+ * @param {modules} modules
+ */
+module.exports.IssueAuthKey = ({ logger, localization, config, accountModel }) => [
+	[
+		body("userNo").trim()
+			.isInt({ min: 1 }).withMessage("Must contain a valid number")
+			.custom(value => accountModel.info.findOne({
+				where: { accountDBID: value }
+			}).then(account => {
+				if (account === null) {
+					return Promise.reject("Not existing account ID");
+				}
+				return true;
+			})),
+		body("ip").trim().isIP().withMessage("Must contain a valid IP")
+	],
+	validationHandler(logger),
+	/**
+	 * @type {RequestHandler}
+	 */
+	async (req, res, next) => {
+		const { userNo, ip } = req.body;
+
+		const account = await accountModel.info.findOne({
+			where: { accountDBID: userNo }
+		});
+
+		const authKey = uuid();
+
+		await accountModel.info.update(
+			{ authKey, lastLoginIP: ip },
+			{ where: { accountDBID: account.get("accountDBID") } }
+		);
+
+		// Push a launcher grant to the connection-gate proxy (fire-and-forget) for the player's real IP,
+		// so the grant lands ahead of the game client's connection. Mirrors GetAuthKeyAction.
+		proxyWebhook.notifyLauncherGrant({
+			ip,
+			accountId: account.get("accountDBID"),
+			name: account.get("userName"),
+			authKey
+		});
+
+		res.json({
+			Return: true,
+			ReturnCode: 0,
+			Msg: "success",
+			UserNo: account.get("accountDBID"),
+			UserName: account.get("userName"),
+			AuthKey: authKey,
+			Region: localization.getRegionByLanguage(account.get("language") || env.string("API_PORTAL_LOCALE"), config)
 		});
 	}
 ];
