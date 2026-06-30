@@ -94,7 +94,12 @@ const setupOidc = async (router, mod, logger) => {
 			try {
 				const claims = tokens.claims() || {};
 				const login = claims.preferred_username || claims.sub;
-				const roles = readRealmRoles(tokens.access_token, logger);
+				// Prefer realm roles from the VALIDATED id_token (a realm-role protocol
+				// mapper emits realm_access.roles into it). Fall back to decoding the
+				// access token only when that claim is absent (e.g. mapper not applied),
+				// so authz never rides an unverified token when the id_token carries it.
+				const idRoles = claims?.realm_access?.roles;
+				const roles = Array.isArray(idRoles) ? idRoles : readRealmRoles(tokens.access_token, logger);
 				const permitted = roles.some(role => allowedRoles.includes(role));
 
 				if (!permitted) {
