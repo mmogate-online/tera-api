@@ -10,7 +10,7 @@ Built-in admin panel for full control of all functionality and viewing API logs.
 
 ## Requirements
 
-* [Node.js](https://nodejs.org/en/) >= v18.0.0
+* [Node.js](https://nodejs.org/en/) >= v22.12.0 (v24 LTS recommended)
 * [MySQL Server](https://dev.mysql.com/downloads/windows/installer/5.7.html) v5.7
 * [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) >= v12.0.2000 (optional, if you need characters sync)
 * [TERA Retail Server](https://forum.ragezone.com/f797/) (any patch)
@@ -36,7 +36,11 @@ If you don't plan to use [tera-client-packer](https://github.com/justkeepquiet/t
 
 ### Admin Panel
 
-By default, the admin panel is available on all IP addresses on port 8050, like [http://127.0.0.1:8050](http://127.0.0.1:8050/). You can change this in the **.env** settings. To enter the admin panel, use login `apiadmin` and password `password`. These credentials should be used **only for tests**, and in production you need to set up integration with the Steer Server.
+By default, the admin panel is available on all IP addresses on port 8050, like [http://127.0.0.1:8050](http://127.0.0.1:8050/). You can change this in the **.env** settings. Three authentication modes are supported, selected by configuration:
+
+* **OIDC / Keycloak** (recommended for production): set `OIDC_ENABLE=true` and the `OIDC_*` parameters (see **.env.example**). Operators sign in through your identity provider; access is granted to the realm roles listed in `OIDC_ALLOWED_ROLES`. See [src/plugins/oidc](src/plugins/oidc).
+* **QA local credential** (break-glass): login `apiadmin` with `ADMIN_PANEL_QA_PASSWORD`, available when `STEER_ENABLE=false`. Intended as a fallback only; failed logins are rate-limited (see the `adminPanel.login` section in **config/rateLimits.default.js**). Set a strong password in production.
+* **STEER** (legacy): per-function permissions via the Steer Server, see below.
 
 ### Integration with Steer Server
 

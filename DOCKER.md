@@ -60,7 +60,7 @@ The `data/captcha-images/`, `data/shop-slides-bg/`, and `data/tera-icons/` folde
 docker compose build
 ```
 
-The build uses a multi-stage Dockerfile: a `deps` stage with native build toolchain (cairo, pango, jpeg, gif, rsvg, python3) for `canvas`, and a slim `runtime` stage that ships only the runtime libraries plus `tini`.
+The build uses a multi-stage Dockerfile: a `deps` stage with native build toolchain (cairo, pango, jpeg, gif, rsvg, python3) for `canvas`, and a slim `runtime` stage that ships only the runtime libraries plus `tini`. The base image is `node:24-bookworm-slim`, and `deps` runs `npm ci` against the committed `package-lock.json` for reproducible installs.
 
 ## 6. First boot
 
@@ -109,7 +109,7 @@ curl -I http://localhost:8050/    # Admin Panel login page
 curl -I http://localhost/         # Portal API
 ```
 
-Admin panel default credentials (test only): `apiadmin` / `password`. Set up Steer integration before exposing this anywhere.
+Admin panel default credentials (test only): `apiadmin` / `password` (failed logins are rate-limited). For production, enable OIDC login (`OIDC_ENABLE=true` plus the `OIDC_*` keys) and treat the QA credential as break-glass with a strong password; see the README "Admin Panel" section.
 
 ## 9. Day-to-day commands
 
