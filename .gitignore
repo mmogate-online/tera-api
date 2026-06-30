@@ -17,7 +17,6 @@ public/patch/*
 !public/patch/.gitkeep
 share/dataitems/*
 config/slsOverride.js
-package-lock.json
 .env
 Thumbs.db
 *.tmp

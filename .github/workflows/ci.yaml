@@ -34,15 +34,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # The runtime image ships on Node 18, but tests run on Node 20 LTS where the built-in node:test
-      # runner is stable. Decoupling the test runtime from the production runtime is intentional.
-      # package-lock.json is gitignored in this repo (the Dockerfile uses `npm install`), so we can't use
-      # `npm ci` or setup-node's lockfile-based cache here.
+      # Tests run on Node 20 LTS where the built-in node:test runner is stable; the
+      # runtime image ships on Node 24. Decoupling the test runtime from production is
+      # intentional. package-lock.json is committed, so we use `npm ci` (deterministic,
+      # integrity-pinned) and setup-node's lockfile cache.
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-fund
+      # Verify the registry signatures / SLSA provenance of the installed tree.
+      # Non-blocking: surfaces integrity issues in the logs without gating deploys on
+      # an unsigned transitive package.
+      - run: npm audit signatures
+        continue-on-error: true
       - run: npm test
 
   publish:
