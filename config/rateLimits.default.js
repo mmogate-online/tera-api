@@ -148,3 +148,17 @@ module.exports.portalApi = {
 		}
 	}
 };
+
+// Rate limitter settings for Admin Panel
+module.exports.adminPanel = {
+	// endpoint: POST /login (QA / local + remember-me login)
+	// Brute-force protection: counts FAILED attempts per client IP; a successful
+	// login clears the counter, so correct logins are never throttled. 5 failed
+	// attempts per 15 minutes, then block for 15 minutes. The OIDC login
+	// (/login/oidc) is NOT rate-limited here -- Keycloak guards that flow.
+	login: {
+		points: 5,
+		duration: 900,
+		blockDuration: 900
+	}
+};

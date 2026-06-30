@@ -119,11 +119,29 @@ module.exports.login = () => [
 /**
  * @param {modules} modules
  */
-module.exports.loginAction = ({ logger, passport }) => [
+module.exports.loginAction = mod => {
+	const { logger, passport, rateLimitter } = mod;
+
+	// Brute-force protection for the QA/local + remember-me (custom) login. Counts
+	// FAILED attempts per client IP; a successful login clears the counter, so a
+	// correct login is never throttled. OIDC (/login/oidc) is unaffected -- Keycloak
+	// guards that flow. Tunable via the `adminPanel.login` section of rateLimits.
+	const RL_ENDPOINT = "adminPanel.login";
+
+	return [
 	/**
 	 * @type {RequestHandler}
 	 */
 	async (req, res, next) => {
+		// If this IP is currently blocked, reject before touching the credentials.
+		// consume(..., 0) is a penalty-free check that fails only while blocked.
+		if (rateLimitter && !(await rateLimitter.consume(RL_ENDPOINT, req.ip, 0))) {
+			return res.status(429).render("adminLogin", {
+				errorMessage: res.locals.__("Too many failed login attempts. Please try again later."),
+				login: "", password: ""
+			});
+		}
+
 		const strategy = req.body?.useToken === "true" ? "custom" : "local";
 
 		passport.authenticate(strategy, (error, user, msg) => {
@@ -134,12 +152,22 @@ module.exports.loginAction = ({ logger, passport }) => [
 			}
 
 			if (msg) {
+				// Wrong credentials: count this attempt toward the lockout.
+				if (rateLimitter) {
+					rateLimitter.consume(RL_ENDPOINT, req.ip).catch(() => {});
+				}
+
 				return res.render("adminLogin", {
 					errorMessage: res.locals.__(msg), login: "", password: ""
 				});
 			}
 
 			req.login(user, async () => {
+				// Successful login: clear the failed-attempt counter for this IP.
+				if (rateLimitter) {
+					rateLimitter.delete(RL_ENDPOINT, req.ip).catch(() => {});
+				}
+
 				if (user.remember) {
 					try {
 						const maxAge = 86400000 * 7;
@@ -171,7 +199,8 @@ module.exports.loginAction = ({ logger, passport }) => [
 			});
 		})(req, res, next);
 	}
-];
+	];
+};
 
 /**
  * @param {modules} modules
