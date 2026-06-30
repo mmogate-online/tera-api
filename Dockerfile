@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:18-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 
 ENV NODE_ENV=production \
     NPM_CONFIG_LOGLEVEL=warn
@@ -24,7 +24,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 # ---- runtime image ----
-FROM node:18-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     TZ=UTC

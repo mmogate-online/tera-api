@@ -163,7 +163,17 @@ module.exports = async modules => {
 		}),
 		secret: env.string("ADMIN_PANEL_SECRET"),
 		resave: false,
-		saveUninitialized: true
+		saveUninitialized: true,
+		cookie: {
+			httpOnly: true,
+			// Unset by default => attribute omitted, identical to upstream. For OIDC set
+			// ADMIN_PANEL_COOKIE_SAMESITE=lax so the session cookie rides the top-level
+			// callback redirect (carrying the PKCE state); "strict" would break it.
+			sameSite: env.string("ADMIN_PANEL_COOKIE_SAMESITE"),
+			// Off by default to preserve upstream behavior; set true in production
+			// (HTTPS via Cloudflare) together with ADMIN_PANEL_TRUSTPROXY_ENABLE=true.
+			secure: env.bool("ADMIN_PANEL_COOKIE_SECURE", false)
+		}
 	}));
 
 	modules.app.use(passport.initialize());

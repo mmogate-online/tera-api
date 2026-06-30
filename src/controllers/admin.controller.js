@@ -176,22 +176,41 @@ module.exports.loginAction = ({ logger, passport }) => [
 /**
  * @param {modules} modules
  */
-module.exports.logoutAction = ({ logger, steer }) => [
-	/**
-	 * @type {RequestHandler}
-	 */
-	async (req, res, next) => {
-		if (steer.isRegistered && req?.user?.sessionKey) {
-			steer.closeSession(req.user.sessionKey).catch(err =>
-				logger.warn(err)
-			);
-		}
+module.exports.logoutAction = mod => {
+	const { logger, steer } = mod;
 
-		req.logout(() =>
-			res.redirect(req.query.msg ? `/login?msg=${req.query.msg}` : "/login")
-		);
-	}
-];
+	return [
+		/**
+		 * @type {RequestHandler}
+		 */
+		async (req, res, next) => {
+			const isOidc = req?.user?.type === "oidc";
+			const idToken = req?.user?.idToken;
+
+			if (steer.isRegistered && req?.user?.sessionKey) {
+				steer.closeSession(req.user.sessionKey).catch(err =>
+					logger.warn(err)
+				);
+			}
+
+			req.logout(() => {
+				// RP-initiated logout for OIDC sessions: terminate the Keycloak SSO
+				// session via the end-session endpoint. mod.oidcLogout is set by the
+				// OIDC plugin; absent (undefined) when OIDC is off, so QA/STEER keep
+				// the original local-logout behavior.
+				if (isOidc && idToken && typeof mod.oidcLogout === "function") {
+					try {
+						return res.redirect(mod.oidcLogout(idToken));
+					} catch (err) {
+						logger.warn(err);
+					}
+				}
+
+				res.redirect(req.query.msg ? `/login?msg=${req.query.msg}` : "/login");
+			});
+		}
+	];
+};
 
 /**
  * @param {modules} modules

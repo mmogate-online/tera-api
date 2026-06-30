@@ -10,6 +10,8 @@ data/*
 logs/*
 sessions/*
 src/plugins/*
+!src/plugins/oidc
+!src/plugins/oidc/**
 public/updates/*
 public/patch/*
 !public/patch/.gitkeep
@@ -19,3 +21,4 @@ package-lock.json
 .env
 Thumbs.db
 *.tmp
+temp/

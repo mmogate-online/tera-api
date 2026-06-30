@@ -39,6 +39,11 @@
 							<div class="form-group">
 								<button type="submit" class="btn btn-block btn-primary"><%= __("Login") %></button>
 							</div>
+							<%_ if (typeof oidcEnabled !== "undefined" && oidcEnabled) { _%>
+							<div class="form-group">
+								<a href="<%= oidcLoginUrl %>" class="btn btn-block btn-secondary" id="oidc-login"><%= oidcButtonLabel %></a>
+							</div>
+							<%_ } _%>
 							<input type="hidden" name="useToken" id="useToken" value="false">
 							<input type="hidden" name="tz" id="tz" value="">
 						</form>
