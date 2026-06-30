@@ -422,7 +422,8 @@ module.exports.RegisterNewAccount = modules => [
 			userName: login,
 			passWord,
 			email,
-			language: modules.localization.defaultLanguage
+			language: modules.localization.defaultLanguage,
+			privilege: env.number("API_PORTAL_REGISTRATION_DEFAULT_PRIVILEGE", 0)
 		});
 
 		next();

@@ -613,7 +613,8 @@ module.exports.SignupAction = modules => [
 					userName: login,
 					passWord: helpers.getPasswordString(password),
 					email,
-					language: modules.localization.getClientLanguageByLocale(req.query.locale)
+					language: modules.localization.getClientLanguageByLocale(req.query.locale),
+					privilege: env.number("API_PORTAL_REGISTRATION_DEFAULT_PRIVILEGE", 0)
 				});
 
 				const benefit = new Benefit(modules, account.get("accountDBID"));
@@ -740,7 +741,8 @@ module.exports.SignupVerifyAction = modules => [
 				userName,
 				passWord,
 				email,
-				language: modules.localization.getClientLanguageByLocale(req.query.locale)
+				language: modules.localization.getClientLanguageByLocale(req.query.locale),
+				privilege: env.number("API_PORTAL_REGISTRATION_DEFAULT_PRIVILEGE", 0)
 			});
 
 			const benefit = new Benefit(modules, account.get("accountDBID"));
