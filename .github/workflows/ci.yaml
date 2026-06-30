@@ -1,11 +1,15 @@
 name: CI
 
+# Build + deploy model (parity with reforged-mystel / reforged-backend):
+#   - push to `master`        : run tests only (integration gate). No image, no deploy.
+#   - push to `dev` branch     : build the moving `:dev` image, then roll the DEV VM (reforged-d).
+#   - push a git tag (e.g. 1.0.0, 1.0.0-rc.1) : build the immutable `:<tag>` image, bump the PROD
+#     compose pin in reforged-deploy, then roll the PROD VM. Prod is reachable ONLY via tags, so a
+#     branch push can never touch prod. A `-test` tag builds the image but skips bump+deploy.
 on:
-  # Skip CI when a push/PR touches ONLY files that affect neither the tests nor the image build
-  # (docs, the env template, license, editor/dev files). A commit that also changes any other file
-  # still runs. workflow_dispatch ignores path filters, so a manual run is always available.
   push:
-    branches: [master]
+    branches: [master, dev]
+    tags: ['*']
     paths-ignore:
       - '**.md'
       - '.env.example'
@@ -20,6 +24,9 @@ on:
       - '*.code-workspace'
       - '*.bat'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -39,23 +46,16 @@ jobs:
       - run: npm test
 
   publish:
-    # Gate: never build/push an image unless the test suite passed. Skipped on pull requests (test-only).
+    # Build/push ONLY for dev-branch pushes (the moving :dev tag) and release tags (immutable :<tag>).
+    # Never on PRs; never on a plain master push (master runs tests only). Gated behind a green test run.
     needs: test
-    if: github.event_name != 'pull_request'
+    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/dev' || github.ref_type == 'tag') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v6
-
-      - id: vars
-        run: |
-          # Image tag = <UTC-date>-<short-sha>, e.g. 2026.05.06-5ea1069
-          # Sortable, uniquely identifies the commit, visibly NOT upstream semver.
-          TAG="$(date -u +%Y.%m.%d)-${GITHUB_SHA:0:7}"
-          echo "TAG=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Image tag: ${TAG}"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -69,9 +69,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/tera-api
+          # dev push -> :dev (moving). tag push -> :<tag> + :latest (latest only for a final tag, no '-').
           tags: |
-            type=raw,value=${{ steps.vars.outputs.TAG }}
-            type=raw,value=latest
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=raw,value=${{ github.ref_name }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
 
       - uses: docker/build-push-action@v7
         with:
@@ -81,3 +83,86 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # PROD release: one cloud commit rewrites the prod compose pin, then the on-prem runner pulls it.
+  # Excludes hosts/reforged-d/* so a release tag never overwrites the dev pin (which stays :dev).
+  bump:
+    needs: publish
+    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-test') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: bump-tera-api
+      cancel-in-progress: false
+    steps:
+      - name: Checkout reforged-deploy
+        uses: actions/checkout@v6
+        with:
+          repository: mmogate-online/reforged-deploy
+          token: ${{ secrets.DEPLOY_REPO_PAT }}
+          path: reforged-deploy
+
+      - name: Bump the prod tera-api compose pin and push
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd reforged-deploy
+          while IFS= read -r -d '' f; do
+            sed -i -E "s|(ghcr\.io/mmogate-online/tera-api):[^[:space:]\"]+|\1:${TAG}|" "$f"
+          done < <(find compose hosts -path '*/tera-api/compose.yaml' -not -path 'hosts/reforged-d/*' -print0)
+          git config user.name  "reforged-ci"
+          git config user.email "ci@reforged.mmogate.local"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "tera-api prod pin already at ${TAG} - no commit"
+          else
+            git commit -m "chore(deploy): bump tera-api to ${TAG} [skip ci]"
+            git push origin HEAD:main
+          fi
+
+  deploy-prod:
+    # On-prem VM runner rolls prod tera-api against its OWN local docker daemon.
+    needs: bump
+    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-test') }}
+    runs-on: [self-hosted, reforged-vm]
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-tera-api-prod
+      cancel-in-progress: false
+    steps:
+      - name: Sync canonical clone and roll prod tera-api
+        run: |
+          set -euo pipefail
+          git -C /opt/reforged-deploy fetch origin
+          git -C /opt/reforged-deploy pull --ff-only origin main
+          cd /opt/reforged-deploy/compose/tera-api
+          docker compose pull tera-api
+          docker compose up -d tera-api
+          docker compose ps
+
+  # DEV roll (dev-branch pushes only): dev VM's OWN runner pulls the moving :dev image. No bump/commit;
+  # the dev pin is the moving :dev tag in the dev compose override, so `docker compose pull` is the roll.
+  deploy-dev:
+    needs: publish
+    if: ${{ github.ref == 'refs/heads/dev' }}
+    runs-on: [self-hosted, reforged-dev]
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-tera-api-dev
+      cancel-in-progress: false
+    steps:
+      - name: Roll the dev tera-api to the freshly-built :dev image
+        run: |
+          set -euo pipefail
+          git -C /opt/reforged-deploy fetch origin
+          git -C /opt/reforged-deploy pull --ff-only origin main
+          cd /opt/reforged-deploy
+          base="compose/tera-api/compose.yaml"
+          override="hosts/reforged-d/tera-api/compose.override.yaml"
+          docker compose -f "$base" -f "$override" pull tera-api
+          docker compose -f "$base" -f "$override" up -d tera-api
+          docker compose -f "$base" -f "$override" ps
